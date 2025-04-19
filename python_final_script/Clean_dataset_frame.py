@@ -6,13 +6,17 @@ import numpy as np
 import os
 import seaborn as sns
 import statsmodels.api as sm                                          # Import for regression model (Part 5)
+import requests
+from bs4 import BeautifulSoup
+from tabulate import tabulate
+from io import StringIO
+from sklearn.linear_model import LinearRegression
 
 # Tells the computer to default this as working directory 
-os.chdir(r"C:\Users\billc\OneDrive\Desktop\Final Project Data Science")
+os.chdir(r"C:\Users\billc\OneDrive\Desktop\Final Project Data Science\raw_data")
 
 
 
-# ----------------------------------------------------------------------
 # Load and read excel file from Food Index dataset
 food_data = pd.read_excel("Food_index.xlsx", sheet_name="Food inflation")
 
@@ -23,20 +27,19 @@ food_df = food_data.iloc[4:].copy()
 food_df.columns = ['Date', 'Food Inflation Rate (%)']
 food_df = food_df[['Date', 'Food Inflation Rate (%)']]
 
-# Remove missing values that are Nah
+# Remove missing values that are NULL
 food_df.dropna(inplace=True)
 
 # Convert 'Date' and 'Food Inflation' columns into proper data types
 food_df['Date'] = pd.to_datetime(food_df['Date'], errors='coerce')
 food_df['Food Inflation Rate (%)'] = pd.to_numeric(food_df['Food Inflation Rate (%)'], errors='coerce')
-food_df.dropna(inplace=True)                                           # Remove missing values that are Nah
+food_df.dropna(inplace=True)                                           
 
 # Align and match dates to the start of the month
 food_df['Date'] = food_df['Date'].dt.to_period('M').dt.to_timestamp()
 
 
 
-# ----------------------------------------------------------------------
 # Load and clean CPIH (Consumer Price Index) dataset
 total_CPI = pd.read_csv("CPIH_Annual_rate.csv", skiprows=5)            # Skip unncessary information for data extraction                                   
 
@@ -48,21 +51,20 @@ total_CPI['Date'] = pd.to_datetime(total_CPI['Date'], errors='coerce')
 
 # Make sure the values from total_CPI are numeric, avoiding unit errors
 total_CPI['Overall Consumer Price Index (%)'] = pd.to_numeric(total_CPI['Overall Consumer Price Index (%)'], errors='coerce')
-total_CPI.dropna(inplace=True)                                         # Remove missing values that are Nah 
+total_CPI.dropna(inplace=True)                                          
 
 # Align and match dates to the start of the month
 total_CPI['Date'] = total_CPI['Date'].dt.to_period('M').dt.to_timestamp()
 
 
 
-# ----------------------------------------------------------------------
 # Load and read excel file from Weekly Earnings dataset
-earnings_df = pd.read_csv("Median_weekly_earnings_for_full-time_employees.csv", skiprows=12)         # Skip unncessary information for data extraction     
+earnings_df = pd.read_csv("Median_weekly_earnings_for_full-time_employees.csv", skiprows=12)              
 
 # Rename columns title 
 earnings_df.columns = ["Year", "Full-Time", "Part-Time", "All"]
 
-# Remove missing values that are Nah
+# Remove missing values that are NULL
 earnings_df.dropna(inplace=True)
 
 # Convert 'Year' into datatime type, in order to ensure consistency 
@@ -75,7 +77,6 @@ earnings_df["All"] = pd.to_numeric(earnings_df["All"], errors='coerce')
 
 
 
-# ----------------------------------------------------------------------
 # Load and read excel file from Family Food Spending dataset
 family_spending_df = pd.read_csv("Household_food_budget_proportion.csv")
 
@@ -93,35 +94,44 @@ family_spending_df["Year"] = pd.to_datetime(family_spending_df["Year"].str[:4], 
 # Ensure python to interpreted as numeric values, not string or boolean 
 family_spending_df["Low Income Food Spend (%)"] = pd.to_numeric(family_spending_df["Low Income Food Spend (%)"], errors='coerce')
 family_spending_df["All Households Food Spend (%)"] = pd.to_numeric(family_spending_df["All Households Food Spend (%)"], errors='coerce')
-family_spending_df.dropna(inplace=True)                                  # Remove missing values that are Nah
+family_spending_df.dropna(inplace=True)                             
 
 # This new and cleaned version replaced the original dataset 
 family_spending_df.to_csv("cleaned_family_food_spending.csv", index=False)
 
 
 
-# ----------------------------------------------------------------------
 # Merge food inflation and CPI for comparsion
 merged_inflation = pd.merge(food_df, total_CPI, on="Date", how="inner")
-print("\nMerged inflation data:\n", merged_inflation.head(10), "\n")                # Print and review the format of the dataset (10 sample)
+print("\nMerged inflation data:\n", merged_inflation.head(10), "\n")                 # Print top 10 samples
 
 # Merge earnings and food share data for income analysis
 merged_earnings_foodshare = pd.merge(earnings_df, family_spending_df, on="Year", how="inner")
-print("Merged earnings + food share data:\n", merged_earnings_foodshare.head())     # Print and review the format of the dataset
+print("Merged earnings + food share data:\n", merged_earnings_foodshare.head())   
 
 
 
-# ----------------------------------------------------------------------
-# Visualization and Analysis 
-# Overall Consumer Price Index(CPI) vs Food Prices (Part 1)
-
+# Overall Consumer Price Index (CPIH) vs Food Prices (Part 1) 
 plt.figure(figsize=(10, 5))
 
 # Line plot for Food Price
 plt.plot(merged_inflation['Date'], merged_inflation['Food Inflation Rate (%)'], label = 'Food Inflation (%)', marker = 'x', ms = 5, color = 'aqua')
 
 # Line plot for overall CPI
-plt.plot(merged_inflation['Date'], merged_inflation['Overall Consumer Price Index (%)'], label = 'Overall CPI (%)', marker = 'o', ms = 5, color = 'limegreen')
+plt.plot(merged_inflation['Date'], merged_inflation['Overall Consumer Price Index (%)'], label = 'Overall CPIH (%)', marker = 'o', ms = 5, color = 'limegreen')
+
+# Get values and dates
+foodprice_peaked = merged_inflation['Food Inflation Rate (%)'].values
+cpi_peaked = merged_inflation['Overall Consumer Price Index (%)'].values
+date = merged_inflation['Date'].values
+
+# Extract Peak values for each plot
+foodprice_max = np.argmax(foodprice_peaked)
+cpi_max = np.argmax(cpi_peaked)
+
+# Add text annoations on each figure's peaked
+plt.text(date[foodprice_max], foodprice_peaked[foodprice_max] + 0.5, f"{foodprice_peaked[foodprice_max]:.1f}%", fontsize=12, ha='center', va='bottom', color='black')
+plt.text(date[cpi_max], cpi_peaked[cpi_max] + 0.5, f"{cpi_peaked[cpi_max]:.1f}%", fontsize=12, ha='center', va='bottom', color='black')
 
 # Titles and labels
 plt.title('Comparing Food prices and CPIH (UK)', fontsize = 15, fontweight = 'bold')
@@ -134,11 +144,6 @@ plt.show()
 
 
 # Supermarkets Price comparsion (Part 2)
-
-import requests
-from bs4 import BeautifulSoup
-from tabulate import tabulate
-from io import StringIO
 
 # Extract data from selected URL
 url = "https://www.which.co.uk/reviews/supermarkets/article/food-price-inflation-tracker-aU2oV0A46tu3"
@@ -154,6 +159,9 @@ soup = BeautifulSoup(response.text, 'html.parser')
 for table in soup.find_all('table'):
     table_html = str(table)
     supermarket_price_df = pd.read_html(StringIO(table_html))[0]            # [0] means get the first values and return it to the table in pandas
+
+    print("Supermarkets found:", supermarket_price_df["Supermarket"].tolist())
+
 
     # Rename columns for improving clarity
     supermarket_price_df.rename(columns={
@@ -199,17 +207,17 @@ plt.figure(figsize=(12, 6))
 
 plt.bar(x - bar_width, earnings_full, width=bar_width , color='lightskyblue', edgecolor='black', label='Full Time')
 plt.bar(x, earnings_part, width=bar_width, color='pink', edgecolor='black', label='Part Time')
-plt.plot(x + bar_width, earnings_all, color='green', marker='o', linewidth=2, label='All Employees')
+plt.plot(x, earnings_all, color='green', marker='o', ms=5, linewidth=3, label='All Employees')
 
 # Create a for loop for displaying text annotations on All Employees
 for i in range (len(earnings_all)):
-    plt.text(x[i] + bar_width, earnings_all.iloc[i] + 20, f"£{earnings_all.iloc[i]:.0f}", fontsize=10, color='black', ha='center')
+    plt.text(x[i], earnings_all.iloc[i] + 25, f"£{earnings_all.iloc[i]:.0f}", fontsize=12, color='black', ha='center')
 
 # Titles and labels
-plt.title('Median Weekly Earnings for Full-Time Employees (UK)', fontsize=15, fontweight = 'bold')
+plt.title('Median Weekly Earnings for UK Employees', fontsize=15, fontweight = 'bold')
 plt.xlabel('Year')
-plt.ylabel('Earnings (£)')
-plt.xticks(x, earnings_years, rotation = 45)
+plt.ylabel('Weekly Earnings (£)')
+plt.xticks(x, earnings_years, rotation=45)
 plt.legend()  
 plt.grid(axis='y', linestyle='dashed', alpha=0.7)
 plt.tight_layout()
@@ -234,7 +242,7 @@ plt.plot(food_budget_years, low_income_share, marker='o', linestyle='-', linewid
          label='Low-Income Households', color='blueviolet')
 
 plt.plot(food_budget_years, all_households_share, marker='s', linestyle='--', linewidth=2,
-         label='All Households', color='gold')
+         label='All Households', color='orange')
 
 # Fill the gap area
 plt.fill_between(food_budget_years, low_income_share, all_households_share, color='lightgrey', alpha=0.5, label='Purchasing Power Gap')
@@ -251,13 +259,10 @@ plt.show()
 
 
 
-# ----------------------------------------------------------------------
 # Regression modelling: Does income level correlate with how much is spent on food in the UK (Part 5)
 # Load Weekly Food Basket Expenditure
 food_trends_file = pd.ExcelFile("Detailed_expenditure_and_trends.xlsx")
 print("Available sheets:", food_trends_file.sheet_names)
-
-from sklearn.linear_model import LinearRegression
 
 # Choose Sheet 3.2 from food_trends_file 
 # Parse it to extract food spending by income group
@@ -275,7 +280,7 @@ food_spending_income_df = food_spending_income_df[[
     "Sixth", "Seventh", "Eighth", "Ninth", "Highest"
 ]]
 
-food_spending_income_df.dropna(subset=["Category"], inplace=True)               # Skip and drop values in 'Category' that are Nah 
+food_spending_income_df.dropna(subset=["Category"], inplace=True)               # Skip and drop values in 'Category' that are NULL 
 
 # Choose 6 samples of food categories to represent how normal consumers will buy in a supermarket
 food_categories_regression = [
@@ -308,7 +313,7 @@ long_income_food_df["Income Decile Rank"] = long_income_food_df["Income Decile"]
 
 # Ensure "Weekly Spend (£)" are numeric values, avoiding errors
 long_income_food_df["Weekly Spend (£)"] = pd.to_numeric(long_income_food_df["Weekly Spend (£)"], errors='coerce')
-long_income_food_df.dropna(inplace=True)                                        # Skip and drop values that are Nah
+long_income_food_df.dropna(inplace=True)                                  
 
 # Visualize regression result 
 
@@ -356,7 +361,3 @@ for i, category in enumerate(long_income_food_df["Category"].unique()):
 plt.suptitle("Does Income Matters in Determining Food Spending? (Regression Analysis)", fontsize=15)
 plt.tight_layout()
 plt.show()
-
-
-
-
